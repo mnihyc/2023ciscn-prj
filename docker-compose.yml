@@ -1,0 +1,12 @@
+version: '3'
+services:
+  py311:
+    container_name: prj-py311
+    build: .
+    restart: unless-stopped
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
