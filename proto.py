@@ -129,11 +129,26 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
     # TODO
     return p, f, h
 
+def comm_telnet(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
+    p, f, h = 'telnet', [], ''
+    data = comm_single(ip, port, b'\r\n', timeout)
+    print(data)
+    if b"test\r\n" in data:
+        return "telnet", [], "HFish"
+    if data is False:
+        return '', [], ''
+    if data.startswith(b"\xff\xfd\x18\xff"):
+        return "telnet", [], ""
+    else:
+        return '', [], ''
+    return p, f, h
+
 proto_map: dict[str, Callable[[str, int, float], tuple[str, list[str], str]]] = {
     'ftp': comm_ftp,
     'ssh': comm_ssh,
     'smtp': comm_smtp,
     'http': comm_http,
+    'telnet': comm_telnet,
     'https': lambda a,b,c: comm_http(a,b,c,https=True),
     'rsync': lambda a,b,c: ('', [], ''),
 }
