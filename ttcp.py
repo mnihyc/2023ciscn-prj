@@ -105,6 +105,8 @@ class TTcp:
                 assproto = 'rsync'
             if data.startswith(b'SSH-'):
                 assproto = 'ssh'
+            if data.startswith(b"\xff\xfd\x18\xff"):
+                assproto = 'telnet'
             if assproto == '':
                 # guess by port
                 if self.port in port_map:
