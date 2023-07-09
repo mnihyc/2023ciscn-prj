@@ -69,7 +69,10 @@ def comm_ftp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
 
 def comm_ssh(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
     p, f, h = 'ssh', [], ''
-    data = comm_single(ip, port, b'SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.3\r\n', timeout)
+    #data = comm_single(ip, port, b'SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.3\r\n', timeout)
+    data = comm_single(ip, port, b'SSH-2.1-OpenSSH_5.9p1\r\n', timeout)
+    if b"bad version " in data:
+        return "ssh", [], "kippo"
     if data is False:
         return '', [], ''
     if data.startswith(b'SSH-'):
