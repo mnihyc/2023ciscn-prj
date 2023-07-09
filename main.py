@@ -58,6 +58,7 @@ if __name__ == '__main__':
             ports.append(int(pr))
         else:
             ports.extend(range(int(pr.split('-')[0].strip()), int(pr.split('-')[1].strip())+1))
+    ports = list(set(ports))
 
     __import__('sniff').QUEUE_LOAD = args.load
 
