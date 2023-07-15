@@ -38,11 +38,11 @@ def comm_chained(ip: str, port: int, timeout: float, func: Callable[[socket.sock
 port_map: dict[int, str] = {
     21: 'ftp',
     22: 'ssh',
-    25: 'smtp',
+#    25: 'smtp',
     80: 'http',
     443: 'https',
-    873: 'rsync',
-    3389: 'rdp',
+#    873: 'rsync',
+#    3389: 'rdp',
 }
 
 def comm_ftp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
@@ -69,12 +69,11 @@ def comm_ftp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
 
 def comm_ssh(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
     p, f, h = 'ssh', [], ''
-    #data = comm_single(ip, port, b'SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.3\r\n', timeout)
     data = comm_single(ip, port, b'SSH-2.1-OpenSSH_5.9p1\r\n', timeout)
-    if b"bad version " in data:
-        return "ssh", [], "kippo"
     if data is False:
         return '', [], ''
+    if b'bad version ' in data:
+        h = 'kippo'
     if data.startswith(b'SSH-'):
         data = data.split(b'\r\n')[0].decode().strip().split(' ')
         version = data[0].split('-')
@@ -135,23 +134,23 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
 def comm_telnet(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
     p, f, h = 'telnet', [], ''
     data = comm_single(ip, port, b'\r\n', timeout)
-    print(data)
-    if b"test\r\n" in data:
-        return "telnet", [], "HFish"
     if data is False:
         return '', [], ''
     if data.startswith(b"\xff\xfd\x18\xff"):
-        return "telnet", [], ""
+        pass
     else:
         return '', [], ''
+    if b"test\r\n" in data:
+        h = "HFish"
     return p, f, h
 
 proto_map: dict[str, Callable[[str, int, float], tuple[str, list[str], str]]] = {
     'ftp': comm_ftp,
     'ssh': comm_ssh,
-    'smtp': comm_smtp,
-    'http': comm_http,
     'telnet': comm_telnet,
+#    'smtp': comm_smtp,
+    'http': comm_http,
     'https': lambda a,b,c: comm_http(a,b,c,https=True),
-    'rsync': lambda a,b,c: ('', [], ''),
+#    'rdp': lambda a,b,c: ('', [], ''),
+#    'rsync': lambda a,b,c: ('', [], ''),
 }

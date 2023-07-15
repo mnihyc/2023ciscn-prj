@@ -65,7 +65,7 @@ if __name__ == '__main__':
     conf.verb = 0
 
     def scanUtility(threads: int, ft: Callable[..., Iterable[Callable[..., None]]], *args, **kwargs):
-        start_sniff(usage=kwargs.get('usage', 'ip'), tcpdump=kwargs.get('tcpdump', False))
+        start_sniff(usage=kwargs.get('usage', 'ip'), tcpdump=kwargs.get('tcpdump', False), quick=kwargs.get('quick', False))
         try:
             pool = ThreadPool(threads)
             started, cnt, tlen = False, 0, len(func.TGS)
@@ -123,17 +123,17 @@ if __name__ == '__main__':
             func.loadTGS()
             if args.type == 'icmp':
                 logger.info(f'Starting scanning with {args.threads} threads and ICMP echo-request')
-                scanUtility(args.threads, Target.alloc_icmp, timeout=args.timeout, retries=args.retries, ports=ports, tcpdump=args.tcpdump)
+                scanUtility(args.threads, Target.alloc_icmp, timeout=args.timeout, retries=args.retries, ports=ports, tcpdump=args.tcpdump, quick=True)
                 logger.info('Scanning completed, filtering unreseponsive IPs')
                 func.TGS = list(filter(lambda x: x.icmp.latency != -1, func.TGS))
             if args.type == 'tcp':
                 logger.info(f'Starting scanning with {args.threads} threads and {len(ports)} ports')
-                scanUtility(args.threads, Target.alloc_tcp, timeout=args.timeout, retries=args.retries, ports=ports, tcpdump=args.tcpdump)
+                scanUtility(args.threads, Target.alloc_tcp, timeout=args.timeout, retries=args.retries, ports=ports, tcpdump=args.tcpdump, quick=True)
                 logger.info('Scanning completed, filtering non-open port IPs')
                 func.TGS = list(filter(lambda x: len(x.tcp) > 0, func.TGS))
             if args.type == 'all':
                 logger.info(f'Starting scanning with {args.threads} threads and ICMP echo-request plus {len(ports)} ports')
-                scanUtility(args.threads, Target.alloc_scan, timeout=args.timeout, retries=args.retries, ports=ports, tcpdump=args.tcpdump)
+                scanUtility(args.threads, Target.alloc_scan, timeout=args.timeout, retries=args.retries, ports=ports, tcpdump=args.tcpdump, quick=True)
                 logger.info('Scanning completed, filtering completely dead IPs')
                 func.TGS = list(filter(lambda x: x.icmp.latency != -1 or len(x.tcp) > 0, func.TGS))
             logger.info(f'Left total {len(func.TGS)} targets')

@@ -1,6 +1,6 @@
 import time, random
 from scapy.all import *
-from scapy.layers.inet import IP, ICMP
+from scapy.layers.inet import IP, ICMP, TCP
 from typing import Callable
 from thread import ItemPool
 from threading import Event
@@ -12,6 +12,10 @@ QUEUE_LOAD: int = 10
 STOP_SNIFF: bool = True
 PRL: ItemPool[Packet] = ItemPool()
 FTL: ItemPool[tuple[float, Packet, Callable[[None|Packet, float], None]]] = ItemPool()
+
+# fast receiver (optimized for ICMP/TCP 'SYN)
+TOL: ItemPool[tuple[float, str]] = ItemPool()
+EPM: dict[str, Callable[[None|Packet, float], None]] = {}
 
 gbsocket = L3RawSocket(iface=conf.iface) if not WINDOWS else conf.L3socket(iface=conf.iface)
 
@@ -58,11 +62,30 @@ def _handle():
         else:
             _remove() # wait until timeout
 
-def start_sniff(iface: str = conf.iface, usage: str = 'ip', tcpdump: bool = False):
+def _handle_quick():
+    def _collector():
+        with TOL._lock:
+            while len(TOL.data) > 0 and TOL.data[0][0] < time.time():
+                t = TOL.data.popleft()
+                if t[1] in EPM:
+                    EPM[t[1]](None)
+                    del EPM[t[1]]
+    while not STOP_SNIFF:
+        while (pkt := PRL.pop()) is not None:
+            if (ICMP in pkt and (i:='I'+str(pkt[IP].src)+'|'+str(pkt[ICMP].seq)) in EPM) or \
+                (TCP in pkt and (i:='T'+str(pkt[IP].src)+'|'+str(pkt[IP].sport)+'|'+str(pkt[TCP].ack)) in EPM):
+                with TOL._lock:
+                    EPM[i](pkt, time.time()-TOL.data[0][0] if len(TOL.data)>0 else 0)
+                    del EPM[i]
+        else:
+            _collector()
+
+
+def start_sniff(iface: str = conf.iface, usage: str = 'ip', tcpdump: bool = False, quick: bool = False):
     global STOP_SNIFF
     if STOP_SNIFF:
         STOP_SNIFF = False
-        Thread(target=_handle).start()
+        Thread(target=_handle_quick if quick else _handle).start()
     Thread(target=_sniff, args=(iface, usage, tcpdump)).start()
 
 def stop_sniff():
@@ -83,23 +106,32 @@ def custom_send(packet: Packet, **kwargs):
         except:
             logger.exception('Unable to send packet, skipping')
 
-def custom_sr1(packet: Packet, timeout: float, **kwargs) -> None|Packet:
+def custom_sr1(packet: Packet, timeout: float, quick: bool = False, **kwargs) -> None|Packet:
     wait, rcv = Event(), None
     def callback(ans: None|Packet, *args):
         nonlocal rcv
         rcv = ans
         wait.set()
-        if random.random() < 0.01:
-            logger.debug(f'Current queue load: {PRL.length}|{FTL.length}; timeout latency left {args[0]*1000 if len(args) else 0:.0f}ms')
+        if ans is not None and random.random() < 0.001:
+            logger.debug(f'Current queue load: {PRL.length}|{FTL.length}|{TOL.length}; timeout latency left {args[0]*1000 if len(args)>0 else 0:.0f}ms')
     if STOP_SNIFF:
         return None
     if PRL.length > QUEUE_LOAD: # heavy load
         while PRL.length > (QUEUE_LOAD >> 2): # fuse
             time.sleep(1)
-    add_filter(timeout, packet, callback)
+    if quick:
+        with TOL._lock:
+            i = 'I'+str(packet[IP].dst)+'|'+str(packet[ICMP].seq) if ICMP in packet else \
+                ('T'+str(packet[IP].dst)+'|'+str(packet[IP].dport)+'|'+str(packet[TCP].seq+1) if TCP in packet else None)
+            assert(i is not None)
+            TOL.data.append((time.time()+timeout, i))
+            EPM[i] = callback
+    else:
+        add_filter(timeout, packet, callback)
     #if ICMP in packet: print('send', packet)
     custom_send(packet, **kwargs)
     wait.wait()
     return rcv
+
 
 __all__ = ['start_sniff', 'stop_sniff', 'add_filter', 'custom_sr1', 'custom_send']

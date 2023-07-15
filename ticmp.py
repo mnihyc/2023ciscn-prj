@@ -36,9 +36,10 @@ class TIcmp:
         timeout = kwargs.get('timeout', 1000) / 1000
         retries = kwargs.get('retries', 3)
         callback = kwargs.get('callback', lambda x: None)
+        quick = kwargs.get('quick', False)
         for i in range(retries):
             packet = IP(dst=ip)/ICMP(type='echo-request')/b'12345678901234567890'
-            ans = custom_sr1(packet, timeout=timeout)
+            ans = custom_sr1(packet, timeout=timeout, quick=quick)
             #print(packet, '<<<>>>', ans)
             if ans is not None and ICMP in ans and ans[ICMP].type == 0: # echo-reply
                 self.ok = True

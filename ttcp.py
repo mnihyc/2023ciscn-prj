@@ -59,20 +59,21 @@ class TTcp:
         timeout = kwargs.get('timeout', 2000) / 1000
         retries = kwargs.get('retries', 3)
         callback = kwargs.get('callback', lambda x: None)
+        quick = kwargs.get('quick', False)
         for i in range(retries):
             packet = IP(dst=ip)/TCP(sport=TTcp.SCAN_SPORT, dport=self.port, flags='S', options=[('Timestamp',(0,0))])
-            ans = custom_sr1(packet, timeout=timeout)
+            ans = custom_sr1(packet, timeout=timeout, quick=quick)
             #print(packet, '<<<>>>', ans)
             if ans is not None and TCP in ans and str(ans[TCP].flags) == 'SA':
                 self.ok = True
                 self.accessible = True
-                custom_send(IP(dst=ip)/TCP(sport=TTcp.SCAN_SPORT, dport=self.port, flags='R'), verbose=False)
+                custom_send(IP(dst=ip)/TCP(sport=TTcp.SCAN_SPORT, dport=self.port, flags='R', ack=ans.seq), verbose=False)
                 callback(self)
                 return
             elif ans is not None and ((TCP in ans and (str(ans[TCP].flags) == 'R' or str(ans[TCP].flags) == 'RA')) or TCPerror in ans):
                 self.ok = True
                 self.accessible = False
-                custom_send(IP(dst=ip)/TCP(sport=TTcp.SCAN_SPORT, dport=self.port, flags='R'), verbose=False)
+                custom_send(IP(dst=ip)/TCP(sport=TTcp.SCAN_SPORT, dport=self.port, flags='R', ack=ans.seq), verbose=False)
                 callback(self)
                 return
         self.ok = True
@@ -113,7 +114,7 @@ class TTcp:
                     assproto = port_map[self.port]
                 else:
                     continue # unresolvable
-            # test accuracy
+            # test accuracy and obtain metainfo
             p, f, h = '', [], ''
             try:
                 p, f, h = proto_map[assproto](ip, self.port, timeout)
