@@ -15,7 +15,7 @@ if __name__ == '__main__':
     subparsers = parser.add_subparsers(dest='CMD')
     help_parser = subparsers.add_parser('help', help='Show this help message')
     init_parser = subparsers.add_parser('init', help='Init IP list to scan (OVERWRITE CURRENT RESULT)')
-    init_parser.add_argument('type', choices=['ip', 'file'], help='ip_range / file')
+    init_parser.add_argument('type', choices=['ips', 'file'], help='ips_range / file')
     init_parser.add_argument('filename', help='IP ranges to load / File to load IPs from')
     filter_parser = subparsers.add_parser('filter', help='Filter dead IPs based on ...')
     filter_parser.add_argument('type', choices=['all', 'icmp', 'tcp'], help='icmp / tcp')
@@ -24,6 +24,7 @@ if __name__ == '__main__':
     scan_parser = subparsers.add_parser('scan', help='Perform a full detective scan based on current discovery')
     query_parser = subparsers.add_parser('query', help='Query a single IP')
     query_parser.add_argument('ip', help='IP to query')
+    export_parser = subparsers.add_parser('export', help='Export current discovery to a JSON file as the provided format (OVERWRITE)')
     parser.add_argument('-p', '--ports', default='common', type=str, help='Port range to check alive (default: common ports; example: 22,135-139,443)')
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('-r', '--retries', default=3, type=int, help='Number of retries (default: 3)')
@@ -105,7 +106,7 @@ if __name__ == '__main__':
         case 'help':
             parser.print_help()
         case 'init':
-            if args.type == 'ip':
+            if args.type == 'ips':
                 ip_list = [ip.strip() for ip in args.filename.split(',')]
             if args.type == 'file':
                 with open(args.filename, 'r', encoding='utf-8') as f:
@@ -164,5 +165,28 @@ if __name__ == '__main__':
             target = target[0]
             logger.info(f'Querying {target.ip} (cached info)')
             logger.info(json.dumps(target.to_json(), indent=4))
-            
+        case 'export':
+            func.loadTGS()
+            logger.info(f'Exporting to result.json')
+            res = {}
+            for target in func.TGS:
+                res[target.ip] = {}
+                svs, dvs, hnp = [], [], []
+                for tcp in target.tcp:
+                    son = {
+                        'port': tcp.port,
+                        'protocol': tcp.protocol if tcp.protocol else None,
+                        'service_app': tcp.fingerprint if tcp.fingerprint else None,
+                    }
+                    svs.append(son)
+                    if tcp.device: dvs.append(tcp.device)
+                    if tcp.honeypot: hnp.append(str(tcp.port) + '/' + tcp.honeypot)
+                res[target.ip]['services'] = svs
+                if len(dvs) > 1:
+                    logger.warning(f'Inconsistent devices detected on {target.ip}: {",".join(dvs)} (Is this expected?)')
+                res[target.ip]['deviceinfo'] = dvs if dvs else None
+                res[target.ip]['honeypot'] = hnp if hnp else None
+            with open('result.json', 'w', encoding='utf-8') as f:
+                f.write(json.dumps(res, indent=4))
+            logger.info('Export completed')
 

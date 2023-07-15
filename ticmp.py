@@ -25,7 +25,7 @@ class TIcmp:
         return {
             'ok': self.ok,
             'latency': self.latency,
-            'ttl': self.ttl
+            'ttl': self.ttl,
         }
 
     def __str__(self):

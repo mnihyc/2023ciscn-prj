@@ -44,7 +44,7 @@ class Target:
             'icmp': self.icmp.to_json(),
             'tcp': [tcp.to_json() for tcp in self.tcp],
             'time': self.time,
-            'os': self.os
+            'os': self.os,
         }
     
     def alloc_icmp(self, **kwargs) -> Iterator[tuple[Callable[..., None], tuple, dict]]:
