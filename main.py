@@ -175,7 +175,7 @@ if __name__ == '__main__':
                 for tcp in target.tcp:
                     son = {
                         'port': tcp.port,
-                        'protocol': tcp.protocol if tcp.protocol else None, # don't remove guess; strict mode
+                        'protocol': tcp.protocol if tcp.protocol and '?' not in tcp.protocol else None, # don't guess; strict mode
                         'service_app': tcp.fingerprint if tcp.fingerprint else None,
                     }
                     svs.append(son)

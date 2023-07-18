@@ -158,18 +158,18 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         if https:
             return comm_http(ip, port, timeout, https=False) # fallback to http
         return '', [], ''
-    if res.content == b'It looks like you are trying to access MongoDB over HTTP on the native driver port.\r\n':
+    if res.content.startswith(b'It looks like you are trying to access MongoDB over HTTP on the native driver port.'):
         return '?mongo?', [], '' # FALSE POSITIVE
     if 'server' in res.headers:
         s = res.headers['server']
-        m = re.search(r'(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|WebLogic)(?:[\s\/\-\(]+([0-9.a-z]+))?', s, re.I)
+        m = re.search(r'(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd)(?:[\s\/\-\(]+([0-9][0-9.a-z]+))?', s, re.I)
         if m: update(m.group(1), (m.group(2) if m.group(2) else 'N'))
         if m and m.group(1).lower() == 'iis': update('Windows', 'N')
         m = re.search(r'\((Ubuntu|Debian|CentOS|Windows)\)', s, re.I)
         if m: update(m.group(1), 'N')
-        m = re.search(r'OpenSSL/([0-9.]+)', s, re.I)
+        m = re.search(r'OpenSSL\/([0-9.]+)', s, re.I)
         if m: update('OpenSSL', m.group(1))
-        m = re.search(r'PHP/([0-9.]+)', s, re.I)
+        m = re.search(r'PHP\/([0-9.]+)', s, re.I)
         if m: update('PHP', m.group(1))
     # additional info of page (briefly)
     try:
@@ -215,6 +215,18 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         update('Elasticsearch', ver)
     if '<title>RabbitMQ Management</title>' in res.text:
         update('RabbitMQ', 'N')
+    if '<FONT FACE="Helvetica" COLOR="black" SIZE="3"><H2>Error 404--Not Found</H2>' in res.text or port == 7001:
+        doc = ''
+        try:
+            res1 = requests.get(f'{p}://{ip}:{port}/console/login/LoginForm.jsp', timeout=timeout, verify=False)
+            doc = res1.text
+        except:
+            pass
+        if 'WebLogic Server' in doc:
+            ver = 'N'
+            m = re.search(r'WebLogic Server Version: ([0-9.]+)', doc, re.I)
+            if m: ver = m.group(1)
+            update('WebLogic', ver)
     if '<h2>Blog Comments</h2>' in res.text and 'Please post your comments for the blog' in res.text:
         h = 'glastopf'
     if '<title>HFish - 扩展企业安全测试主动诱导型开源蜜罐框架系统</title>' in res.text and 'https://github.com/hacklcx/HFish' in res.text:
