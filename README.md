@@ -3,17 +3,19 @@
 ### Usage
 
 ```
-usage: main.py [-h] [-p PORTS] [-d] [-r RETRIES] [-t TIMEOUT] [--tcptimeout TCPTIMEOUT] [-j THREADS] [-l LOAD] [--tcpdump]
-               {help,init,filter,clear,scan,query} ...
+usage: main.py [-h] [-p PORTS] [-d] [-r RETRIES] [-t TIMEOUT] [--tcptimeout TCPTIMEOUT] [-j THREADS] [-l LOAD]
+               [--tcpdump]
+               {help,init,filter,clear,scan,query,export} ...
 
 positional arguments:
-  {help,init,filter,clear,scan,query}
+  {help,init,filter,clear,scan,query,export}
     help                Show this help message
     init                Init IP list to scan (OVERWRITE CURRENT RESULT)
     filter              Filter dead IPs based on ...
     clear               Clear metainfo of IPs
     scan                Perform a full detective scan based on current discovery
     query               Query a single IP
+    export              Export current discovery to a JSON file as the provided format (OVERWRITE)
 
 options:
   -h, --help            show this help message and exit
@@ -25,7 +27,7 @@ options:
   -t TIMEOUT, --timeout TIMEOUT
                         Timeout in ms (default: 2000)
   --tcptimeout TCPTIMEOUT
-                        Timeout for TCP stream in ms (default: 3000)
+                        Timeout for basic TCP stream in ms (default: 3000)
   -j THREADS, --threads THREADS
                         Number of threads to use (default: 200)
   -l LOAD, --load LOAD  Maximum recv queue length, adjust with --timeout to prevent heavy load (default: 200)
@@ -38,12 +40,16 @@ options:
 - Pip: **scapy** >= 2.5.0
 - Pip: **requests**
 
-Or run with **docker-compose.yml**
-
-### Example
+Or run with **docker-compose.yml** by
 
 ```bash
-python main.py init ip 1.1.1.1/32,175.41.217.16,68.183.46.32/32,143.110.244.58/32
+docker-compose run --rm 2023ciscn-prj help
+```
+
+### Example (sequential execution)
+
+```bash
+python main.py init ips 1.1.1.1/32,68.183.46.32/32,143.110.244.58/32
 python main.py -d filter all
 python main.py -d scan
 python main.py query 143.110.244.58

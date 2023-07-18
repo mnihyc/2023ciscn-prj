@@ -1,9 +1,10 @@
 version: '3'
 services:
-  py311:
-    container_name: prj-py311
+  2023ciscn-prj:
+    container_name: 2023ciscn-prj
     build: .
-    restart: unless-stopped
+    volumes:
+      - ./:/app/
     ulimits:
       nproc: 65535
       nofile:

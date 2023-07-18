@@ -87,10 +87,10 @@ if __name__ == '__main__':
             if not started:
                 pool.start()
             if not pool.finished():
-                logger.info('Finished allocating, waiting for threads to stop...')
+                logger.info(f'Finished allocating, {pool.task.length} tasks remaining, waiting for threads to stop...')
             pool.join()
         except KeyboardInterrupt:
-            logger.warning('Interrupted by user, waiting for threads to stop...')
+            logger.warning(f'Interrupted by user, {pool.task.length} tasks remaining, waiting for threads to stop...')
             stop_sniff()
             pool.task.clear()
             func.writeTGS()
@@ -181,11 +181,11 @@ if __name__ == '__main__':
                     svs.append(son)
                     if tcp.device: dvs.append(tcp.device)
                     if tcp.honeypot: hnp.append(str(tcp.port) + '/' + tcp.honeypot)
-                res[target.ip]['services'] = svs
-                if len(dvs) > 1:
+                res[target.ip]['services'] = sorted(svs, key=lambda x: x['port'])
+                if len(set(dvs)) > 1:
                     logger.warning(f'Inconsistent devices detected on {target.ip}: {",".join(dvs)} (Is this expected?)')
-                res[target.ip]['deviceinfo'] = dvs if dvs else None
-                res[target.ip]['honeypot'] = hnp if hnp else None
+                res[target.ip]['deviceinfo'] = list(set(dvs)) if dvs else None
+                res[target.ip]['honeypot'] = list(set(hnp)) if hnp else None
             with open('result.json', 'w', encoding='utf-8') as f:
                 f.write(json.dumps(res, indent=4))
             logger.info('Export completed')

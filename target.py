@@ -80,7 +80,7 @@ class Target:
         for tcp in self.tcp:
             if tcp.ok and tcp.accessible:
                 def callback(tcp: TTcp):
-                    logger.debug(f'TCP detect {self.ip}:{tcp.port} => {tcp.protocol} [{",".join(tcp.fingerprint)}] {tcp.honeypot}')
+                    logger.debug(f'TCP detect {self.ip}:{tcp.port} => {tcp.protocol} [{",".join(tcp.fingerprint)}] {tcp.honeypot} {tcp.device}')
                 yield (tcp.detect, (self.ip,), kwargs | {'callback': callback})
         return
     

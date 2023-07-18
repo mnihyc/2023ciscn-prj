@@ -54,19 +54,23 @@ def comm_chained(ip: str, port: int, timeout: float, func: Callable[[socket.sock
     return ret
 
 port_map: dict[int, str] = {
-    53: '', 111: '', 135: '', 139: '', 445: '', 3389: '', 8443: 'https', # ignored
+    53: '', 111: '', 135: '', 139: '', 445: '', 3389: '', # ignored
     21: 'ftp',
     22: 'ssh',
     23: 'telnet',
-    25: 'smtp',
+    25: 'smtp', 587: 'smtp', # ignored
     80: 'http',
     443: 'https',
     554: 'rtsp',
     1022: 'ssh', # common
     3306: 'mysql',
+    5000: 'http', 5001: 'https', # nas
     5672: 'amqp',
     6379: 'redis',
+    7001: 'https', # nas/weblogic
+    7002: 'https', # weblogic
     8080: 'http', 8080: 'http', 8888: 'http', # common
+    8443: 'https', # common
     9200: 'http', # elasticsearch
     15672: 'http', # rabbitmq
     27017: 'mongodb',
@@ -108,7 +112,10 @@ def comm_ssh(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
         m = re.search(r'OpenSSH_([0-9.]+)', data, re.I)
         if m:
             f.append('OpenSSH/' + m.group(1))
-        m = re.search(r'(Ubuntu|Debian|CentOS)(?:-([0-9.]+))?', data, re.I)
+        else:
+            if '-cisco' in data.lower():
+                f.append('DEVICE: switch/Cisco')
+        m = re.search(r'(Ubuntu|Debian|CentOS)(?:-([0-9][0-9.a-z\+]+))?', data, re.I)
         if m:
             f.append(m.group(1) + '/' + (m.group(2) if m.group(2) else 'N'))
         m = re.search(r'OpenSSH_for_Windows_([0-9.]+)', data, re.I)
@@ -141,6 +148,7 @@ def comm_smtp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
         return '', [], ''
     return p, f, h
 
+# by default, we start from https
 def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[str, list[str], str]:
     import requests
     timeout *= 2 # take additional time for requests
@@ -162,9 +170,10 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         return '?mongo?', [], '' # FALSE POSITIVE
     if 'server' in res.headers:
         s = res.headers['server']
-        m = re.search(r'(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd)(?:[\s\/\-\(]+([0-9][0-9.a-z]+))?', s, re.I)
-        if m: update(m.group(1), (m.group(2) if m.group(2) else 'N'))
-        if m and m.group(1).lower() == 'iis': update('Windows', 'N')
+        m = re.search(r'.*(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|Coyote|Tomcat)(?:[\s\/\-\(]+([0-9][0-9.a-z]+(?:-SNAPSHOT)?))?', s, re.I)
+        if m: update(m.group(1).replace('Coyote', 'Apache').replace('Tomcat', 'Apache'), (m.group(2) if m.group(2) else 'N')) # specialize
+        if m and m.group(1).lower() in ['iis', 'microsoft-httpapi']: update('Windows', 'N')
+        if m and m.group(1).lower() in ['jetty', 'coyote', 'tomcat']: update('Java', 'N')
         m = re.search(r'\((Ubuntu|Debian|CentOS|Windows)\)', s, re.I)
         if m: update(m.group(1), 'N')
         m = re.search(r'OpenSSL\/([0-9.]+)', s, re.I)
@@ -176,8 +185,13 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         res = requests.get(f'{p}://{ip}:{port}/', timeout=timeout, verify=False)
     except:
         return p, f, h
-    if 'PHPSESSID' in res.cookies:
+    ext = res.url.split('?')[0].split('#')[0].split('.')[-1].lower()
+    if 'PHPSESSID' in res.cookies or ext == 'php':
         update('PHP', 'N')
+    if 'JSESSIONID' in res.cookies or ext in ['jsp', 'jspx', 'do', 'action', 'jsf', 'faces', 'xhtml']:
+        update('Java', 'N')
+    if ext in ['aspx', 'asmx', 'ashx', 'axd', 'svc']:
+        update('ASP.NET', 'N')
     if 'X-AspNet-Version' in res.headers:
         s = res.headers['X-AspNet-Version']
         m = re.search(r'([0-9.]+)', s, re.I)
@@ -186,13 +200,30 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         s = res.headers['x-powered-by']
         m = re.search(r'(PHP|ASP.NET|Node\.js|Express|Wordpress)(?:[\s\/\-\(]+([0-9.]+))?', s, re.I)
         if m: update(m.group(1), m.group(2))
+        if m and m.group(1).lower() == 'express': update('Node.js', 'N')
+    if (m:=re.search(r'Welcome to Jetty [0-9]+ on Debian', res.text, re.I)):
+        update('Jetty', 'N')
+        update('Debian', 'N')
+    if '<title>Welcome to nginx!</title>' in res.text:
+        update('nginx', 'N')
+    if (m:=re.search(r'<title>Apache Tomcat/([0-9.]+)</title>', res.text)):
+        update('Apache', m.group(1)) # Note that regard this as Apache, not Tomcat, as required
     if 'wordpress' in res.text.lower():
-        m = re.search(r'WordPress ([0-9.]+)', res.text)
+        ver = ''
+        m = re.search(r'<\s*meta\s*name\s*=\s*"generator"\s*content\s*=\s*"WordPress\s*([0-9.]+)"\s*\/>', res.text)
         if m:
-            update('WordPress', m.group(1))
+            ver = m.group(1)
         elif '/wp-content/' in res.text or '/wp-includes/' in res.text or '/wp-json/' in res.text:
-            update('WordPress', 'N')
-        update('PHP', 'N')
+            ver = 'N'
+        try:
+            res1 = requests.get(f'{p}://{ip}:{port}/feed', timeout=timeout, verify=False)
+            m = re.search(r'<generator>\s*https:\/\/wordpress\.org\/\?v=([0-9.]+)\s*<\/generator>', res1.text)
+            if m: ver = m.group(1)
+        except:
+            pass
+        if ver:
+            update('WordPress', ver)
+            update('PHP', 'N')
     if 'grafana' in res.text.lower():
         if 'public/build/' in res.text:
             ver = 'N'
@@ -232,19 +263,29 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
     if '<title>HFish - 扩展企业安全测试主动诱导型开源蜜罐框架系统</title>' in res.text and 'https://github.com/hacklcx/HFish' in res.text:
         h = 'HFish'
     if '/w-logo-blue.png?ver=20131202' in res.text and '?ver=5.2.2' in res.text and 'static/x.js' in res.text and 'bcd' not in res.text:
-        h = 'Hfish'
-    if '{{szErrorTip}}' in res.text and '{{oLan.username}}' in res.text and '{{oLan.password}}' in res.text:
+        h = 'HFish'
+    if any(x in res.headers.get('server', '') for x in ['Hikvision-Webs', 'DVRDVS-Webs', 'DNVRS-Webs']):
+        f.append('DEVICE: webcam/Hikvision')
+    if 'window.location.href = "doc/page/login.asp";' in res.text:
         f.append('DEVICE: webcam/Hikvision')
     if '<title id="pfsense-logo-svg">pfSense Logo</title>' in res.text and '/js/pfSense.js' in res.text:
         f.append('DEVICE: firewall/pfSense')
+    if 'cisco-IOS' in res.headers.get('server', ''):
+        f.append('DEVICE: switch/Cisco')
+    if 'ZheJiang Dahua Technology CO.,LTD.' in res.headers.get('server', ''):
+        f.append('DEVICE: webcam/dahua')
+    if '<title>WEB SERVICE</title>' in res.text and '<div class="logo"><img src="image/loginlogo.jpg"/></div>' in res.text:
+        f.append('DEVICE: webcam/dahua')
+    if '<meta name="description" content="Synology' in res.text or '<meta name="description" content="DiskStation' in res.text:
+        f.append('DEVICE: nas/Synology')
     # Add more here
     return p, f, h
 
 def comm_telnet(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
     p, f, h = 'telnet', [], ''
-    data = comm_single(ip, port, b'\r\n', timeout)
+    data = comm_double(ip, port, b'\r\n', timeout)
     if data is False:
-        data = comm_double(ip, port, b'\r\n', timeout)
+        data = comm_single(ip, port, b'\r\n', timeout)
     if data is False:
         return '', [], ''
     telnet_commands = [
@@ -273,8 +314,8 @@ def comm_rtsp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
     if data is False:
         return '', [], ''
     if data.startswith(b'RTSP/1.0 200 OK\r\n'):
-        data = data.decode().split('\r\n')
-        pass
+        if b'Server:DahuaRtspServer'.lower() in data.lower().replace(b' ', b''):
+            f.append('DEVICE: webcam/dahua')
     else:
         return '', [], ''
     return p, f, h
@@ -341,7 +382,7 @@ proto_map: dict[str, Callable[[str, int, float], tuple[str, list[str], str]]] = 
     'ftp': comm_ftp,
     'ssh': comm_ssh,
     'telnet': comm_telnet,
-    'smtp': lambda a,b,c: ('', [], ''), # ignored
+    'smtp': lambda a,b,c: ('?smtp?', [], ''), # ignored
     'http': comm_http,
     'https': lambda a,b,c: comm_http(a,b,c,https=True), # fallback to http
     'rtsp': comm_rtsp,
