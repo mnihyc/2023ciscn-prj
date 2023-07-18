@@ -54,7 +54,7 @@ def comm_chained(ip: str, port: int, timeout: float, func: Callable[[socket.sock
     return ret
 
 port_map: dict[int, str] = {
-    53: '', 111: '', 135: '', 139: '', 445: '', 3389: '',
+    53: '', 111: '', 135: '', 139: '', 445: '', 3389: '', 8443: 'https', # ignored
     21: 'ftp',
     22: 'ssh',
     23: 'telnet',
@@ -62,9 +62,11 @@ port_map: dict[int, str] = {
     80: 'http',
     443: 'https',
     554: 'rtsp',
+    1022: 'ssh', # common
     3306: 'mysql',
     5672: 'amqp',
     6379: 'redis',
+    8080: 'http', 8080: 'http', 8888: 'http', # common
     9200: 'http', # elasticsearch
     15672: 'http', # rabbitmq
     27017: 'mongodb',
@@ -141,10 +143,11 @@ def comm_smtp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
 
 def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[str, list[str], str]:
     import requests
+    timeout *= 2 # take additional time for requests
     p, f, h = ('https' if https else 'http'), [], ''
     def update(n: str, v: str) -> None:
         r = list(filter(lambda s: s.lower().startswith(n.lower()), f))
-        if len(r) > 0 and '/N' in r[0]:
+        if len(r) > 0 and r[0].endswith('/N'):
             f.remove(r[0])
             r = []
         if len(r) == 0:
@@ -153,18 +156,21 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         res = requests.get(f'{p}://{ip}:{port}/', timeout=timeout, allow_redirects=False, verify=False)
     except:
         if https:
-            return comm_http(ip, port, timeout, https=False)
+            return comm_http(ip, port, timeout, https=False) # fallback to http
         return '', [], ''
+    if res.content == b'It looks like you are trying to access MongoDB over HTTP on the native driver port.\r\n':
+        return '?mongo?', [], '' # FALSE POSITIVE
     if 'server' in res.headers:
         s = res.headers['server']
-        m = re.search(r'(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|WebLogic)(?:[\s\/\-\(]+([0-9.]+))?', s, re.I)
-        if m: f.append(m.group(1) + '/' + (m.group(2) if m.group(2) else 'N'))
+        m = re.search(r'(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|WebLogic)(?:[\s\/\-\(]+([0-9.a-z]+))?', s, re.I)
+        if m: update(m.group(1), (m.group(2) if m.group(2) else 'N'))
+        if m and m.group(1).lower() == 'iis': update('Windows', 'N')
         m = re.search(r'\((Ubuntu|Debian|CentOS|Windows)\)', s, re.I)
-        if m: f.append(m.group(1) + '/N')
+        if m: update(m.group(1), 'N')
         m = re.search(r'OpenSSL/([0-9.]+)', s, re.I)
-        if m: f.append('OpenSSL/' + m.group(1))
+        if m: update('OpenSSL', m.group(1))
         m = re.search(r'PHP/([0-9.]+)', s, re.I)
-        if m: f.append('PHP/' + m.group(1))
+        if m: update('PHP', m.group(1))
     # additional info of page (briefly)
     try:
         res = requests.get(f'{p}://{ip}:{port}/', timeout=timeout, verify=False)
@@ -181,20 +187,32 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         m = re.search(r'(PHP|ASP.NET|Node\.js|Express|Wordpress)(?:[\s\/\-\(]+([0-9.]+))?', s, re.I)
         if m: update(m.group(1), m.group(2))
     if 'wordpress' in res.text.lower():
-        m = re.search(r'Wordpress ([0-9.]+)', res.text, re.I)
+        m = re.search(r'WordPress ([0-9.]+)', res.text)
         if m:
-            update('Wordpress', m.group(1))
+            update('WordPress', m.group(1))
         elif '/wp-content/' in res.text or '/wp-includes/' in res.text or '/wp-json/' in res.text:
-            update('Wordpress', 'N')
-        update('PHP', '')
+            update('WordPress', 'N')
+        update('PHP', 'N')
     if 'grafana' in res.text.lower():
         if 'public/build/' in res.text:
-            update('Grafana', 'N')
+            ver = 'N'
+            try:
+                res1 = requests.get(f'{p}://{ip}:{port}/api/health', timeout=timeout, verify=False)
+                ver = res1.json()['version']
+            except:
+                pass
+            update('Grafana', ver)
     if 'application/json' in res.headers.get('content-type', ''):
         if 'missing authentication credentials for REST request' in res.text or 'missing authentication token for REST request' in res.text:
             update('Elasticsearch', 'N')
-    if '"cluster_name":"elasticsearch"' in res.text.replace(' ', ''):
-        update('Elasticsearch', 'N')
+    if '"cluster_name":"elasticsearch"' in res.text.replace(' ', '') or '"tagline":"YouKnow,forSearch"' in res.text.replace(' ', '') or \
+            ('"name":"' in res.text.replace(' ', '') and '"cluster_name":"' in res.text.replace(' ', '') and '"cluster_uuid":"' in res.text.replace(' ', '')):
+        ver = 'N'
+        try:
+            ver = res.json()['version']['number']
+        except:
+            pass
+        update('Elasticsearch', ver)
     if '<title>RabbitMQ Management</title>' in res.text:
         update('RabbitMQ', 'N')
     if '<h2>Blog Comments</h2>' in res.text and 'Please post your comments for the blog' in res.text:
@@ -257,6 +275,11 @@ def comm_mysql(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]
             return False
         length, = struct.unpack("<I", data[:3]+b'\x00')
         data += p.recv(length)
+        m = re.search(rb'ubuntu0.([0-9]+.[0-9]+).[0-9]+', data, re.I)
+        if m:
+            f.append('Ubuntu/' + m.group(1).decode())
+        if b'is not allowed to connect to this MySQL server' in data:
+            return True
         if data[4:5] != b'\x0a':
             return False
         return True
@@ -296,8 +319,8 @@ def comm_mongodb(ip: str, port: int, timeout: float) -> tuple[str, list[str], st
     p, f, h = 'mongodb', [], ''
     from pymongo import MongoClient
     try:
-        client = MongoClient(ip, port, serverSelectionTimeoutMS=timeout*2)
-        client.admin.command('ismaster')
+        client = MongoClient(ip, port, connect=False, serverSelectionTimeoutMS=timeout*2000) # additional time for this
+        client.admin.command('hello')
     except:
         return '', [], ''
     return p, f, h
@@ -308,7 +331,7 @@ proto_map: dict[str, Callable[[str, int, float], tuple[str, list[str], str]]] = 
     'telnet': comm_telnet,
     'smtp': lambda a,b,c: ('', [], ''), # ignored
     'http': comm_http,
-    'https': lambda a,b,c: comm_http(a,b,c,https=True),
+    'https': lambda a,b,c: comm_http(a,b,c,https=True), # fallback to http
     'rtsp': comm_rtsp,
     'mysql': comm_mysql,
     'amqp': comm_amqp,

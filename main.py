@@ -29,7 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('-r', '--retries', default=3, type=int, help='Number of retries (default: 3)')
     parser.add_argument('-t', '--timeout', default=2000, type=int, help='Timeout in ms (default: 2000)')
-    parser.add_argument('--tcptimeout', default=3000, type=int, help='Timeout for TCP stream in ms (default: 3000)')
+    parser.add_argument('--tcptimeout', default=3000, type=int, help='Timeout for basic TCP stream in ms (default: 3000)')
     parser.add_argument('-j', '--threads', default=200, type=int, help='Number of threads to use (default: 200)')
     parser.add_argument('-l', '--load', default=200, type=int, help='Maximum recv queue length, adjust with --timeout to prevent heavy load (default: 200)')
     parser.add_argument('--tcpdump', action='store_true', help='Use tcpdump instead of scapy to capture raw packets (default: False)')
@@ -175,7 +175,7 @@ if __name__ == '__main__':
                 for tcp in target.tcp:
                     son = {
                         'port': tcp.port,
-                        'protocol': tcp.protocol if tcp.protocol else None,
+                        'protocol': tcp.protocol if tcp.protocol else None, # don't remove guess; strict mode
                         'service_app': tcp.fingerprint if tcp.fingerprint else None,
                     }
                     svs.append(son)

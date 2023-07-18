@@ -114,18 +114,6 @@ class TTcp:
                 # guess by port
                 if self.port in port_map:
                     assproto = port_map[self.port]
-                else:
-                    # check all
-                    for _, cb in ((0,proto_map['http']),(0,proto_map['ssh'])): # assume http and ssh for faster speed
-                        p, f, h = '', [], ''
-                        try:
-                            p, f, h = cb(ip, self.port, timeout)
-                        except:
-                            pass
-                        if p != '': # found
-                            self.protocol, self.fingerprint, self.honeypot = p, f, h
-                            callback(self)
-                            return
             if assproto == '':
                 continue
             # test accuracy and obtain metainfo
@@ -134,7 +122,7 @@ class TTcp:
                 p, f, h = proto_map[assproto](ip, self.port, timeout)
             except:
                 logger.exception(f'Protocol detection failed on {ip}:{self.port} with assumed:{assproto}, please report this issue')
-            for ff in f:
+            for ff in f: # dup
                 if ff.startswith('DEVICE: '):
                     self.device = ff.split(':')[1].strip()
                     break
@@ -143,6 +131,24 @@ class TTcp:
             if self.protocol != '':
                 callback(self)
                 return
+        # unknown, check all (slow)
+        if self.protocol == '':
+            for cbs in ['ssh', 'ftp', 'telnet', 'mysql', 'rtsp', 'amqp', 'redis', 'mongodb', 'https']:
+                cb = proto_map[cbs]
+                p, f, h = '', [], ''
+                try:
+                    p, f, h = cb(ip, self.port, timeout)
+                except:
+                    pass
+                if p != '': # found
+                    for ff in f: # dup
+                        if ff.startswith('DEVICE: '):
+                            self.device = ff.split(':')[1].strip()
+                            break
+                    f = list(filter(lambda x: not x.startswith('DEVICE: '), f))
+                    self.protocol, self.fingerprint, self.honeypot = p, f, h
+                    callback(self)
+                    return
         callback(self)
         return
 
