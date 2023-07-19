@@ -115,7 +115,7 @@ def comm_ssh(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:
         else:
             if '-cisco' in data.lower():
                 f.append('DEVICE: switch/Cisco')
-        m = re.search(r'(Ubuntu|Debian|CentOS)(?:-([0-9][0-9.a-z\+]+))?', data, re.I)
+        m = re.search(r'(Ubuntu|Debian|CentOS)(?:-([0-9][0-9.a-z\+]*))?', data, re.I)
         if m:
             f.append(m.group(1) + '/' + (m.group(2) if m.group(2) else 'N'))
         m = re.search(r'OpenSSH_for_Windows_([0-9.]+)', data, re.I)
@@ -178,7 +178,7 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
     for _ in range(2):
         if 'server' in res.headers: # no redirect and allow; double check
             s = res.headers['server']
-            m = re.search(r'.*(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|Coyote|Tomcat)(?:[\s\/\-\(]+([0-9][0-9.a-z]+(?:-SNAPSHOT)?))?', s, re.I)
+            m = re.search(r'.*(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|Coyote|Tomcat)(?:[\s\/\-\(]+([0-9][0-9.a-z]*(?:-SNAPSHOT)?))?', s, re.I)
             if m: update(m.group(1).replace('Coyote', 'Apache').replace('Tomcat', 'Apache'), (m.group(2) if m.group(2) else 'N')) # specialize
             if m and m.group(1).lower() in ['iis', 'microsoft-httpapi']: update('Windows', 'N')
             if m and m.group(1).lower() in ['jetty', 'coyote', 'tomcat']: update('Java', 'N')
