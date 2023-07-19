@@ -38,11 +38,13 @@ options:
 
 - **Python** >=  **3.11**
 - Pip: **scapy** >= 2.5.0
+- Pip: **pymongo** >= 4.4.1
 - Pip: **requests**
 
 Or run with **docker-compose.yml** by
 
 ```bash
+docker-compose build
 docker-compose run --rm 2023ciscn-prj help
 ```
 
@@ -58,11 +60,11 @@ python main.py query 143.110.244.58
 ### Development
 
 - **ips.txt**        主办方提供的 IP 段
-- **ipscan_res.txt**       使用其他工具扫描的结果（port range 1-1000）
-- **sav.bak.json**        目前扫描的结果（可供更新）
+- **result.json**    符合主办方要求格式的结果
+- **sav.json**        目前操作的中间结果
 - **main.py**        \_\_main\_\_ 入口点
 - **func.py**        常规函数（sav.json 相关）
-- **proto.py**        协议识别/蜜罐检测（TODO）
+- **proto.py**        协议识别，指纹、设备及蜜罐探测
 - **ttcp.py**        TCP SYN 扫描及端口检测
 - **ticmp.py**        ICMP 测活
 - **target.py**        扫描器分配

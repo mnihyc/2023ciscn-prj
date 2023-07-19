@@ -168,23 +168,30 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         return '', [], ''
     if res.content.startswith(b'It looks like you are trying to access MongoDB over HTTP on the native driver port.'):
         return '?mongo?', [], '' # FALSE POSITIVE
-    if 'server' in res.headers:
-        s = res.headers['server']
-        m = re.search(r'.*(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|Coyote|Tomcat)(?:[\s\/\-\(]+([0-9][0-9.a-z]+(?:-SNAPSHOT)?))?', s, re.I)
-        if m: update(m.group(1).replace('Coyote', 'Apache').replace('Tomcat', 'Apache'), (m.group(2) if m.group(2) else 'N')) # specialize
-        if m and m.group(1).lower() in ['iis', 'microsoft-httpapi']: update('Windows', 'N')
-        if m and m.group(1).lower() in ['jetty', 'coyote', 'tomcat']: update('Java', 'N')
-        m = re.search(r'\((Ubuntu|Debian|CentOS|Windows)\)', s, re.I)
-        if m: update(m.group(1), 'N')
-        m = re.search(r'OpenSSL\/([0-9.]+)', s, re.I)
-        if m: update('OpenSSL', m.group(1))
-        m = re.search(r'PHP\/([0-9.]+)', s, re.I)
-        if m: update('PHP', m.group(1))
-    # additional info of page (briefly)
-    try:
-        res = requests.get(f'{p}://{ip}:{port}/', timeout=timeout, verify=False)
-    except:
-        return p, f, h
+    def get(url: str, retries: int = 3, **kwargs) -> requests.Response:
+        for i in range(retries):
+            try:
+                return requests.get(url, timeout=timeout, verify=False, **kwargs)
+            except:
+                pass
+        return None
+    for _ in range(2):
+        if 'server' in res.headers: # no redirect and allow; double check
+            s = res.headers['server']
+            m = re.search(r'.*(nginx|Apache|LiteSpeed|Jetty|Express|Microsoft-HTTPAPI|openresty|IIS|micro_httpd|Coyote|Tomcat)(?:[\s\/\-\(]+([0-9][0-9.a-z]+(?:-SNAPSHOT)?))?', s, re.I)
+            if m: update(m.group(1).replace('Coyote', 'Apache').replace('Tomcat', 'Apache'), (m.group(2) if m.group(2) else 'N')) # specialize
+            if m and m.group(1).lower() in ['iis', 'microsoft-httpapi']: update('Windows', 'N')
+            if m and m.group(1).lower() in ['jetty', 'coyote', 'tomcat']: update('Java', 'N')
+            m = re.search(r'\((Ubuntu|Debian|CentOS|Windows)\)', s, re.I)
+            if m: update(m.group(1), 'N')
+            m = re.search(r'OpenSSL\/([0-9.]+)', s, re.I)
+            if m: update('OpenSSL', m.group(1))
+            m = re.search(r'PHP\/([0-9.]+)', s, re.I)
+            if m: update('PHP', m.group(1))
+        # additional metainfo
+        res = get(f'{p}://{ip}:{port}/')
+        if res is None:
+            return p, f, h
     ext = res.url.split('?')[0].split('#')[0].split('.')[-1].lower()
     if 'PHPSESSID' in res.cookies or ext == 'php':
         update('PHP', 'N')
@@ -215,12 +222,10 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
             ver = m.group(1)
         elif '/wp-content/' in res.text or '/wp-includes/' in res.text or '/wp-json/' in res.text:
             ver = 'N'
-        try:
-            res1 = requests.get(f'{p}://{ip}:{port}/feed', timeout=timeout, verify=False)
+        res1 = get(f'{p}://{ip}:{port}/feed')
+        if res1 is not None:
             m = re.search(r'<generator>\s*https:\/\/wordpress\.org\/\?v=([0-9.]+)\s*<\/generator>', res1.text)
             if m: ver = m.group(1)
-        except:
-            pass
         if ver:
             update('WordPress', ver)
             update('PHP', 'N')
@@ -228,7 +233,7 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         if 'public/build/' in res.text:
             ver = 'N'
             try:
-                res1 = requests.get(f'{p}://{ip}:{port}/api/health', timeout=timeout, verify=False)
+                res1 = get(f'{p}://{ip}:{port}/api/health')
                 ver = res1.json()['version']
             except:
                 pass
@@ -249,7 +254,7 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
     if '<FONT FACE="Helvetica" COLOR="black" SIZE="3"><H2>Error 404--Not Found</H2>' in res.text or port == 7001:
         doc = ''
         try:
-            res1 = requests.get(f'{p}://{ip}:{port}/console/login/LoginForm.jsp', timeout=timeout, verify=False)
+            res1 = get(f'{p}://{ip}:{port}/console/login/LoginForm.jsp')
             doc = res1.text
         except:
             pass
@@ -266,7 +271,7 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         h = 'HFish'
     if any(x in res.headers.get('server', '') for x in ['Hikvision-Webs', 'DVRDVS-Webs', 'DNVRS-Webs']):
         f.append('DEVICE: webcam/Hikvision')
-    if 'window.location.href = "doc/page/login.asp";' in res.text:
+    if 'window.location.href = "' in res.text and 'doc/page/login.asp' in res.text:
         f.append('DEVICE: webcam/Hikvision')
     if '<title id="pfsense-logo-svg">pfSense Logo</title>' in res.text and '/js/pfSense.js' in res.text:
         f.append('DEVICE: firewall/pfSense')
@@ -274,7 +279,7 @@ def comm_http(ip: str, port: int, timeout: float, https: bool = True) -> tuple[s
         f.append('DEVICE: switch/Cisco')
     if 'ZheJiang Dahua Technology CO.,LTD.' in res.headers.get('server', ''):
         f.append('DEVICE: webcam/dahua')
-    if '<title>WEB SERVICE</title>' in res.text and '<div class="logo"><img src="image/loginlogo.jpg"/></div>' in res.text:
+    if 'src="jsCore/rpcCore.js"></script>' in res.text or 'src="js/loginEx.js"></script>' in res.text: # pretty loose
         f.append('DEVICE: webcam/dahua')
     if '<meta name="description" content="Synology' in res.text or '<meta name="description" content="DiskStation' in res.text:
         f.append('DEVICE: nas/Synology')
@@ -306,6 +311,8 @@ def comm_telnet(ip: str, port: int, timeout: float) -> tuple[str, list[str], str
         return '', [], ''
     if b"test\r\n" in data:
         h = "HFish"
+    if b'(C)DAHUATECH' in data:
+        f.append('DEVICE: webcam/dahua')
     return p, f, h
 
 def comm_rtsp(ip: str, port: int, timeout: float) -> tuple[str, list[str], str]:

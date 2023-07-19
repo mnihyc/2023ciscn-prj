@@ -18,8 +18,8 @@ if __name__ == '__main__':
     init_parser.add_argument('type', choices=['ips', 'file'], help='ips_range / file')
     init_parser.add_argument('filename', help='IP ranges to load / File to load IPs from')
     filter_parser = subparsers.add_parser('filter', help='Filter dead IPs based on ...')
-    filter_parser.add_argument('type', choices=['all', 'icmp', 'tcp'], help='icmp / tcp')
-    clear_parser = subparsers.add_parser('clear', help='Clear metainfo of IPs')
+    filter_parser.add_argument('type', choices=['all', 'icmp', 'tcp', 'proto'], help='all / icmp / tcp / proto')
+    clear_parser = subparsers.add_parser('clear', help='Clear metainfo of IPs (all / icmp only / tcp only / protocol only)')
     clear_parser.add_argument('type', choices=['all', 'icmp', 'tcp'], help='all / icmp / tcp')
     scan_parser = subparsers.add_parser('scan', help='Perform a full detective scan based on current discovery')
     query_parser = subparsers.add_parser('query', help='Query a single IP')
@@ -78,8 +78,9 @@ if __name__ == '__main__':
                 if pool.task.length >= threads * 10 and not started:
                     started = True
                     pool.start()
+                    time.sleep(5)
                 while pool.task.length >= threads * 20:
-                    time.sleep(1)
+                    time.sleep(3)
                 cnt += 1
                 if random.random() < 0.01:
                     logger.info(f'Progress {cnt*100//tlen}%, {cnt}/{tlen} targets allocated, pool size {pool.task.length}')
@@ -97,7 +98,7 @@ if __name__ == '__main__':
             try:
                 pool.join()
             except KeyboardInterrupt:
-                logger.warning('Interrupted by user, force exiting...')
+                logger.warning(f'Interrupted by user, {sum(int(w.is_alive()) for w in pool.WKS)} threads remaining, force exiting...')
                 os._exit(1)
             exit(1)
         stop_sniff()
@@ -146,7 +147,14 @@ if __name__ == '__main__':
                     target.icmp.ok = False
                 if args.type == 'all' or args.type == 'tcp':
                     target.tcp = []
-                target.ok = False
+                if args.type == 'proto':
+                    for tcp in target.tcp:
+                        tcp.protocol = ''
+                        tcp.fingerprint = []
+                        tcp.honeypot = ''
+                        tcp.device = ''
+                else:
+                    target.ok = False
             func.writeTGS()
         case 'scan':
             func.loadTGS()
