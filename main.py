@@ -29,6 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('-r', '--retries', default=3, type=int, help='Number of retries (default: 3)')
     parser.add_argument('-t', '--timeout', default=2000, type=int, help='Timeout in ms (default: 2000)')
+    parser.add_argument('-i', '--iface', default='', type=str, help='Network interface name/index for outgoing and incoming packets (default: chosen by OS)')
     parser.add_argument('--tcptimeout', default=3000, type=int, help='Timeout for basic TCP stream in ms (default: 3000)')
     parser.add_argument('-j', '--threads', default=200, type=int, help='Number of threads to use (default: 200)')
     parser.add_argument('-l', '--load', default=200, type=int, help='Maximum recv queue length, adjust with --timeout to prevent heavy load (default: 200)')
@@ -60,6 +61,17 @@ if __name__ == '__main__':
         else:
             ports.extend(range(int(pr.split('-')[0].strip()), int(pr.split('-')[1].strip())+1))
     ports = list(set(ports))
+
+    if args.iface.strip():
+        try:
+            nid = args.iface.strip()
+            conf.iface = ifaces.dev_from_name(nid) if not nid.isdigit() else ifaces.dev_from_index(nid)
+        except ValueError:
+            logger.error('Unable to find network interface: ' + repr(args.iface.strip()))
+            logger.error('Available interfaces: \n' + repr(ifaces))
+            exit(1)
+        __import__('sniff').gbsocket = L3RawSocket(iface=conf.iface) if not WINDOWS else conf.L3socket(iface=conf.iface)
+    logger.debug('Chosen network interface: ' + repr(conf.iface))
 
     __import__('sniff').QUEUE_LOAD = args.load
 

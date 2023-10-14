@@ -3,8 +3,8 @@
 ### Usage
 
 ```
-usage: main.py [-h] [-p PORTS] [-d] [-r RETRIES] [-t TIMEOUT] [--tcptimeout TCPTIMEOUT] [-j THREADS] [-l LOAD]
-               [--tcpdump]
+usage: main.py [-h] [-p PORTS] [-d] [-r RETRIES] [-t TIMEOUT] [-i IFACE] [--tcptimeout TCPTIMEOUT] [-j THREADS]
+               [-l LOAD] [--tcpdump]
                {help,init,filter,clear,scan,query,export} ...
 
 positional arguments:
@@ -12,7 +12,7 @@ positional arguments:
     help                Show this help message
     init                Init IP list to scan (OVERWRITE CURRENT RESULT)
     filter              Filter dead IPs based on ...
-    clear               Clear metainfo of IPs
+    clear               Clear metainfo of IPs (all / icmp only / tcp only / protocol only)
     scan                Perform a full detective scan based on current discovery
     query               Query a single IP
     export              Export current discovery to a JSON file as the provided format (OVERWRITE)
@@ -26,6 +26,8 @@ options:
                         Number of retries (default: 3)
   -t TIMEOUT, --timeout TIMEOUT
                         Timeout in ms (default: 2000)
+  -i IFACE, --iface IFACE
+                        Network interface name/index for outgoing and incoming packets (default: chosen by OS)
   --tcptimeout TCPTIMEOUT
                         Timeout for basic TCP stream in ms (default: 3000)
   -j THREADS, --threads THREADS
