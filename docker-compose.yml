@@ -1,7 +1,7 @@
 version: '3'
 services:
-  2023ciscn-prj:
-    container_name: 2023ciscn-prj
+  csm-tool:
+    container_name: csm-tool
     build: .
     volumes:
       - ./:/app/

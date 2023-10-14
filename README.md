@@ -1,4 +1,4 @@
-2023ciscn-prj
+2023ciscn-prj / csm-tool
 
 ### Usage
 
@@ -47,7 +47,7 @@ Or run with **docker-compose.yml** by
 
 ```bash
 docker-compose build
-docker-compose run --rm 2023ciscn-prj help
+docker-compose run --rm csm-tool help
 ```
 
 ### Example (sequential execution)
